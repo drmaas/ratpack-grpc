@@ -29,6 +29,8 @@ dependencies {
     implementation("io.grpc:grpc-netty:$grpcVersion")
     implementation("io.grpc:grpc-protobuf:$grpcVersion")
     implementation("io.grpc:grpc-stub:$grpcVersion")
+    implementation("io.netty:netty-transport-native-epoll:4.1.32.Final")
+    implementation("io.netty:netty-transport-native-kqueue:4.1.32.Final")
     // need this for JsonFormat
     implementation("com.google.protobuf:protobuf-java-util:3.6.1")
 
@@ -42,6 +44,8 @@ dependencies {
 
     // Use the Kotlin JUnit integration
     testImplementation("org.jetbrains.kotlin:kotlin-test-junit5")
+
+    testImplementation("ch.qos.logback:logback-classic:1.2.3")
 }
 
 protobuf {

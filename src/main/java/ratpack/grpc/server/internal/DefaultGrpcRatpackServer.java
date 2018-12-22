@@ -9,6 +9,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import ratpack.api.Nullable;
 import ratpack.exec.internal.DefaultExecController;
+import ratpack.exec.internal.ExecThreadBinding;
 import ratpack.func.Action;
 import ratpack.func.Function;
 import ratpack.grpc.config.GrpcConfig;
@@ -41,7 +42,7 @@ public class DefaultGrpcRatpackServer implements GrpcRatpackServer {
         }
     }
 
-    public static final Logger LOGGER = LoggerFactory.getLogger(RatpackServer.class);
+    public static final Logger logger = LoggerFactory.getLogger(RatpackServer.class);
 
     protected final Action<? super RatpackServerSpec> definitionFactory;
     protected InetSocketAddress boundAddress;
@@ -104,12 +105,12 @@ public class DefaultGrpcRatpackServer implements GrpcRatpackServer {
         try {
             ServerConfig serverConfig;
 
-            LOGGER.info("Starting server...");
+            logger.info("Starting server...");
 
             DefaultGrpcRatpackServer.DefinitionBuild definitionBuild = buildUserDefinition();
             if (definitionBuild.error != null) {
                 if (definitionBuild.getServerConfig().isDevelopment()) {
-                    LOGGER.warn("Exception raised getting server config (will use default config until reload):", definitionBuild.error);
+                    logger.warn("Exception raised getting server config (will use default config until reload):", definitionBuild.error);
                     needsReload.set(true);
                 } else {
                     throw Exceptions.toException(definitionBuild.error);
@@ -118,6 +119,7 @@ public class DefaultGrpcRatpackServer implements GrpcRatpackServer {
 
             serverConfig = definitionBuild.getServerConfig();
             execController = new DefaultExecController(serverConfig.getThreads());
+            ExecThreadBinding.bind(true, execController);
             serverRegistry = serverRegistry.join(Registry.single(execController));
 
             // initialize ssl
@@ -138,15 +140,15 @@ public class DefaultGrpcRatpackServer implements GrpcRatpackServer {
             String startMessage = String.format("Ratpack started %sfor %s://%s:%s", serverConfig.isDevelopment() ? "(development) " : "", getScheme(), getBindHost(), getBindPort());
 
             if (Slf4jNoBindingDetector.isHasBinding()) {
-                if (LOGGER.isInfoEnabled()) {
-                    LOGGER.info(startMessage);
+                if (logger.isInfoEnabled()) {
+                    logger.info(startMessage);
                 }
             } else {
                 System.out.println(startMessage);
             }
 
             if (serverConfig.isRegisterShutdownHook()) {
-                shutdownHookThread = new Thread("ratpack-shutdown-thread") {
+                shutdownHookThread = new Thread("grpc-shutdown-thread") {
                     @Override
                     public void run() {
                         try {
@@ -181,7 +183,7 @@ public class DefaultGrpcRatpackServer implements GrpcRatpackServer {
             // just ignore
         }
 
-        LOGGER.info("Stopping server...");
+        logger.info("Stopping server...");
 
         try {
             if (execController != null) {
@@ -198,7 +200,7 @@ public class DefaultGrpcRatpackServer implements GrpcRatpackServer {
             this.execController = null;
         }
 
-        LOGGER.info("Server stopped.");
+        logger.info("Server stopped.");
     }
 
     @Override
