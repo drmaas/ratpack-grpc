@@ -1,4 +1,4 @@
-package ratpack.grpc.config;
+package ratpack.grpc;
 
 public class GrpcConfig {
 

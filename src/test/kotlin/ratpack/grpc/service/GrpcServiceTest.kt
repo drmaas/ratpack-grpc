@@ -1,28 +1,30 @@
-package ratpack.grpc.server
+package ratpack.grpc.service
 
 import ratpack.grpc.GreeterClient
 import ratpack.grpc.GreeterService
+import ratpack.grpc.GrpcModule
 import ratpack.guice.Guice
+import ratpack.server.RatpackServer
 import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
-import kotlin.test.assertTrue
 
-class GrpcRatpackServerTest {
+class GrpcServiceTest {
 
-    var server: GrpcRatpackServer? = null
+    var server: RatpackServer? = null
     var client: GreeterClient? = null
 
     @BeforeTest
     fun setup() {
         val port = 32768
         client = GreeterClient("localhost", port)
-        server = GrpcRatpackServer.start {
-            it.serverConfig {
-                it.port(port)
-            }
+        server = RatpackServer.start {
             it.registry(Guice.registry {
                 it.bind(GreeterService::class.java)
+                it.module(GrpcModule::class.java) {
+                    it.port(port)
+                    it.useRatpackEventLoop(false)
+                }
             })
         }
     }
@@ -34,8 +36,7 @@ class GrpcRatpackServerTest {
     }
 
     @Test
-    fun `test grpc ratpack server`() {
-        assertTrue(server?.isRunning ?: false, "server is not running")
+    fun `test grpc server`() {
         val user = "drmaas"
         val response = client?.greet(user)
         assert(response == "Hello drmaas")

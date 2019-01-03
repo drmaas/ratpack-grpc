@@ -1,4 +1,4 @@
-package ratpack.grpc.config;
+package ratpack.grpc;
 
 import com.google.inject.Scopes;
 import ratpack.grpc.service.GrpcService;

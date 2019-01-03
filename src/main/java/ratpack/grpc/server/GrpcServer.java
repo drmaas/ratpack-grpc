@@ -1,23 +1,28 @@
-package ratpack.grpc.core;
+package ratpack.grpc.server;
 
+import io.grpc.BindableService;
 import io.grpc.Server;
-import io.grpc.ServerServiceDefinition;
 import io.grpc.netty.NettyServerBuilder;
+import io.netty.buffer.PooledByteBufAllocator;
+import io.netty.channel.ChannelOption;
+import io.netty.channel.FixedRecvByteBufAllocator;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import ratpack.api.Nullable;
 import ratpack.exec.ExecController;
-import ratpack.grpc.config.GrpcConfig;
+import ratpack.grpc.GrpcConfig;
 import ratpack.server.ServerConfig;
 import ratpack.util.internal.TransportDetector;
 
 import java.net.InetSocketAddress;
+import java.time.Duration;
 import java.util.List;
+import java.util.concurrent.TimeUnit;
 
 public class GrpcServer {
 
     private ExecController execController;
-    private List<ServerServiceDefinition> services;
+    private List<BindableService> services;
     private ServerConfig serverConfig;
     private GrpcConfig config;
 
@@ -29,27 +34,60 @@ public class GrpcServer {
 
     private static final Logger logger = LoggerFactory.getLogger(GrpcServer.class);
 
-    public GrpcServer(ExecController execController, List<ServerServiceDefinition> services, ServerConfig serverConfig, GrpcConfig config) {
+    public GrpcServer(ExecController execController, List<BindableService> services, ServerConfig serverConfig, GrpcConfig config) {
         this.execController = execController;
         this.services = services;
         this.serverConfig = serverConfig;
         this.config = config;
     }
 
-    // TODO get all serverConfig options and set grpc builder values
     public GrpcServer start() throws Exception {
         int port = config.getPort();
         address = new InetSocketAddress(port);
         NettyServerBuilder serverBuilder = NettyServerBuilder.forAddress(address)
-                .channelType(TransportDetector.getServerSocketChannelImpl());
+                .channelType(TransportDetector.getServerSocketChannelImpl())
+                .withChildOption(ChannelOption.ALLOCATOR, PooledByteBufAllocator.DEFAULT);
+
+        // custom grpc ratpack configurations
         if (config.isUseRatpackEventLoop()) {
+            // worker and boss can be the same, see https://groups.google.com/forum/#!topic/grpc-io/LrnAbWFozb0
+            serverBuilder.bossEventLoopGroup(execController.getEventLoopGroup());
+            serverBuilder.workerEventLoopGroup(execController.getEventLoopGroup());
             serverBuilder.executor(execController.getExecutor());
         }
+
+        // standard ratpack configurations
         if (serverConfig.getNettySslContext() != null) {
             serverBuilder.sslContext(serverConfig.getNettySslContext());
         }
+        serverConfig.getConnectTimeoutMillis().ifPresent(i ->
+                serverBuilder.withChildOption(ChannelOption.CONNECT_TIMEOUT_MILLIS, i)
+        );
+        serverConfig.getMaxMessagesPerRead().ifPresent(i -> {
+            FixedRecvByteBufAllocator allocator = new FixedRecvByteBufAllocator(i);
+            serverBuilder.withChildOption(ChannelOption.RCVBUF_ALLOCATOR, allocator);
+        });
+        serverConfig.getReceiveBufferSize().ifPresent(i ->
+                serverBuilder.withChildOption(ChannelOption.SO_RCVBUF, i)
+        );
+        serverConfig.getWriteSpinCount().ifPresent(i ->
+                serverBuilder.withChildOption(ChannelOption.WRITE_SPIN_COUNT, i)
+        );
+        serverConfig.getConnectQueueSize().ifPresent(i ->
+                serverBuilder.withChildOption(ChannelOption.SO_BACKLOG, i)
+        );
+        Duration idle = serverConfig.getIdleTimeout();
+        if (!idle.isZero() && !idle.isNegative()) {
+            serverBuilder.maxConnectionIdle(idle.getNano(), TimeUnit.NANOSECONDS);
+            serverBuilder.maxHeaderListSize(serverConfig.getMaxHeaderSize());
+        }
+
+        // services
         services.forEach(serverBuilder::addService);
+
+        // start server
         server = serverBuilder.build().start();
+
         logger.info("gRPC server started, listening on " + port);
 
         shutdownHookThread = new Thread(() -> {

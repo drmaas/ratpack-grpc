@@ -1,37 +1,30 @@
 package ratpack.grpc.service;
 
-import io.grpc.ServerServiceDefinition;
+import com.google.common.collect.Lists;
+import io.grpc.BindableService;
 import ratpack.exec.ExecController;
-import ratpack.grpc.config.GrpcConfig;
-import ratpack.grpc.core.GrpcServer;
+import ratpack.grpc.GrpcConfig;
+import ratpack.grpc.server.GrpcServer;
+import ratpack.registry.Registry;
 import ratpack.server.ServerConfig;
 import ratpack.service.Service;
 import ratpack.service.StartEvent;
 import ratpack.service.StopEvent;
 
-import javax.inject.Inject;
 import java.util.List;
 
 public class GrpcService implements Service {
 
-    private ExecController execController;
-    private List<ServerServiceDefinition> services;
-    private GrpcConfig config;
-    private ServerConfig serverConfig;
-
     private GrpcServer server;
-
-    @Inject
-    public GrpcService(ExecController execController, List<ServerServiceDefinition> services, ServerConfig serverConfig, GrpcConfig config) {
-        this.execController = execController;
-        this.services = services;
-        this.serverConfig = serverConfig;
-        this.config = config;
-    }
 
     @Override
     public void onStart(StartEvent event) throws Exception {
-        server = new GrpcServer(execController, services, serverConfig, config).start();
+        Registry registry = event.getRegistry();
+        ExecController execController = registry.get(ExecController.class);
+        List<BindableService> services = Lists.newArrayList(registry.getAll(BindableService.class));
+        ServerConfig serverConfig = registry.get(ServerConfig.class);
+        GrpcConfig config = registry.get(GrpcConfig.class);
+        this.server = new GrpcServer(execController, services, serverConfig, config).start();
     }
 
     @Override

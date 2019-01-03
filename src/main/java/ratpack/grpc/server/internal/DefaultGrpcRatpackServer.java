@@ -1,8 +1,7 @@
 package ratpack.grpc.server.internal;
 
 import com.google.common.collect.Lists;
-import io.grpc.ServerServiceDefinition;
-import io.netty.channel.Channel;
+import io.grpc.BindableService;
 import io.netty.handler.ssl.SslContext;
 import io.netty.util.ResourceLeakDetector;
 import org.slf4j.Logger;
@@ -12,9 +11,9 @@ import ratpack.exec.internal.DefaultExecController;
 import ratpack.exec.internal.ExecThreadBinding;
 import ratpack.func.Action;
 import ratpack.func.Function;
-import ratpack.grpc.config.GrpcConfig;
-import ratpack.grpc.core.GrpcServer;
+import ratpack.grpc.GrpcConfig;
 import ratpack.grpc.server.GrpcRatpackServer;
+import ratpack.grpc.server.GrpcServer;
 import ratpack.impose.Impositions;
 import ratpack.impose.UserRegistryImposition;
 import ratpack.registry.Registry;
@@ -24,6 +23,7 @@ import ratpack.server.ServerConfig;
 import ratpack.server.internal.HostUtil;
 import ratpack.server.internal.RatpackServerDefinition;
 import ratpack.server.internal.ServerCapturer;
+import ratpack.server.internal.ServerRegistry;
 import ratpack.server.internal.Slf4jNoBindingDetector;
 import ratpack.service.internal.DefaultEvent;
 import ratpack.service.internal.ServicesGraph;
@@ -46,7 +46,6 @@ public class DefaultGrpcRatpackServer implements GrpcRatpackServer {
 
     protected final Action<? super RatpackServerSpec> definitionFactory;
     protected InetSocketAddress boundAddress;
-    protected Channel channel;
     protected DefaultExecController execController;
     protected Registry serverRegistry = Registry.empty();
     protected ServicesGraph servicesGraph;
@@ -119,8 +118,8 @@ public class DefaultGrpcRatpackServer implements GrpcRatpackServer {
 
             serverConfig = definitionBuild.getServerConfig();
             execController = new DefaultExecController(serverConfig.getThreads());
+            serverRegistry = ServerRegistry.serverRegistry(this, impositions, execController, serverConfig, definitionBuild.getUserRegistryFactory());
             ExecThreadBinding.bind(true, execController);
-            serverRegistry = serverRegistry.join(Registry.single(execController));
 
             // initialize ssl
             SslContext sslContext = serverConfig.getNettySslContext();
@@ -131,10 +130,9 @@ public class DefaultGrpcRatpackServer implements GrpcRatpackServer {
             servicesGraph.start(new DefaultEvent(serverRegistry, reloading));
 
             // start server
-            List<ServerServiceDefinition> services = Lists.newArrayList(serverRegistry.getAll(ServerServiceDefinition.class));
+            List<BindableService> services = Lists.newArrayList(serverRegistry.getAll(BindableService.class));
             GrpcConfig grpcConfig = new GrpcConfig().port(serverConfig.getPort()).useRatpackEventLoop(true);
             server = new GrpcServer(execController, services, serverConfig, grpcConfig).start();
-
             boundAddress = server.address();
 
             String startMessage = String.format("Ratpack started %sfor %s://%s:%s", serverConfig.isDevelopment() ? "(development) " : "", getScheme(), getBindHost(), getBindPort());
